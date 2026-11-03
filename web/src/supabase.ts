@@ -49,6 +49,8 @@ export type Task = {
   quadrant: Quadrant | null;
   ei_quadrant: EiQuadrant | null;
   done: boolean;
+  done_at: string | null;
+  reviewed: boolean;
   moved_at: string | null;
   ei_moved_at: string | null;
   created_at: string;

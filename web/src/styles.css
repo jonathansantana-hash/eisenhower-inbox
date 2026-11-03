@@ -241,6 +241,18 @@ input, textarea, select { font: inherit; color: inherit; }
 .tips ul { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .tips li { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
 .tips li svg { flex: none; margin-top: 1px; color: var(--faint); }
+.review-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px; background: #e6f6ec; color: #1f9d55; font-size: 11px; font-weight: 600; font-style: normal; }
+.review-nav { display: flex; align-items: center; gap: 6px; margin: 10px 0 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.review-nav button { width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink-2); line-height: 1; }
+.review-nav button:hover:not(:disabled) { border-color: var(--line-2); }
+.review-nav button:disabled { opacity: 0.35; cursor: default; }
+.review-empty { margin: 4px 0 0; font-size: 12.5px; color: var(--faint); }
+.review-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.review-list li { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.review-list .check { margin-top: 1px; }
+.review-title { cursor: pointer; color: var(--ink); transition: color 0.15s; overflow-wrap: anywhere; }
+.review-list li.reviewed .review-title { color: var(--faint); text-decoration: line-through; }
+.check.green { --c: #1f9d55; --tint: #e6f6ec; }
 .tips-quote { margin: 12px 0 0; font-size: 12.5px; color: var(--muted); font-style: italic; }
 
 /* ---------- Modais ---------- */

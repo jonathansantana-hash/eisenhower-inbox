@@ -280,8 +280,8 @@ function Board({ email, demo }: { email: string; demo?: Task[] }) {
 
   function toggleDone(t: Task) {
     const done = !t.done;
-    patch(t.id, { done });
-    if (done) pushToast({ text: `Concluída: ${t.title}`, undo: () => patch(t.id, { done: false }) });
+    patch(t.id, { done, done_at: done ? new Date().toISOString() : null, reviewed: false });
+    if (done) pushToast({ text: `Concluída: ${t.title}`, undo: () => patch(t.id, { done: false, done_at: null, reviewed: false }) });
   }
 
   async function remove(t: Task) {
@@ -439,6 +439,8 @@ function Board({ email, demo }: { email: string; demo?: Task[] }) {
               <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
               Mostrar concluídas {doneCount > 0 && <span className="muted">({doneCount})</span>}
             </label>
+
+            <Review tasks={tasks} onOpen={setOpenId} onToggleReviewed={(t) => patch(t.id, { reviewed: !t.reviewed })} />
 
             <details className="tips">
               <summary>Dicas para aplicar a matriz</summary>
@@ -713,6 +715,51 @@ function DraggableRow({ task, onOpen, onToggleDone }: { task: Task; onOpen: (id:
     <li ref={setNodeRef} {...listeners} {...attributes} style={{ opacity: isDragging ? 0.3 : 1 }} onClick={() => onOpen(task.id)}>
       <TaskRow task={task} onToggleDone={onToggleDone} />
     </li>
+  );
+}
+
+// Revisar tarefas: lista o que foi concluído no dia anterior (com navegação entre dias)
+function Review({ tasks, onOpen, onToggleReviewed }: { tasks: Task[]; onOpen: (id: string) => void; onToggleReviewed: (t: Task) => void }) {
+  const [offset, setOffset] = useState(-1);
+  const day = todayPlus(offset);
+  const list = tasks
+    .filter((t) => t.done && t.done_at && localYmd(t.done_at) === day)
+    .sort((a, b) => Number(a.reviewed) - Number(b.reviewed) || (a.done_at ?? "").localeCompare(b.done_at ?? ""));
+  const pending = list.filter((t) => !t.reviewed).length;
+  const label =
+    offset === -1 ? "Ontem" : offset === 0 ? "Hoje" : new Date(day + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }).replace(".", "");
+
+  return (
+    <details className="tips review">
+      <summary>
+        Revisar tarefas {offset === -1 && pending > 0 && <span className="review-count">{pending}</span>}
+      </summary>
+      <div className="review-nav">
+        <button type="button" aria-label="Dia anterior" onClick={() => setOffset((o) => o - 1)}>‹</button>
+        <span>{label}</span>
+        <button type="button" aria-label="Próximo dia" disabled={offset >= 0} onClick={() => setOffset((o) => o + 1)}>›</button>
+      </div>
+      {list.length === 0 ? (
+        <p className="review-empty">Nenhuma tarefa concluída neste dia.</p>
+      ) : (
+        <ul className="review-list">
+          {list.map((t) => (
+            <li key={t.id} className={t.reviewed ? "reviewed" : ""}>
+              <button
+                type="button"
+                className={`check green ${t.reviewed ? "on" : ""}`}
+                aria-label={t.reviewed ? "Desmarcar revisão" : "Marcar como revisada"}
+                title={t.reviewed ? "Desmarcar" : "Revisada"}
+                onClick={() => onToggleReviewed(t)}
+              >
+                <Icon name="check" size={11} />
+              </button>
+              <span className="review-title" onClick={() => onOpen(t.id)}>{t.title}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }
 
@@ -1153,7 +1200,7 @@ const EMPTY_TASK: Task = {
   id: "", source: "manual", slack_channel_id: null, slack_ts: null, slack_user_name: null, permalink: null,
   raw_text: null, title: "", summary: null, due_date: null, urgency: null, importance: null, effort: null,
   suggested_quadrant: null, suggested_ei_quadrant: null, ai_reason: null, quadrant: null, ei_quadrant: null,
-  done: false, moved_at: null, ei_moved_at: null, created_at: new Date().toISOString(),
+  done: false, done_at: null, reviewed: false, moved_at: null, ei_moved_at: null, created_at: new Date().toISOString(),
 };
 const mkDemo = (t: Partial<Task>, i: number): Task => ({
   ...EMPTY_TASK, id: `demo-${i}`, created_at: new Date(Date.now() - i * 3_600_000).toISOString(), ...t,
@@ -1168,6 +1215,8 @@ const DEMO_TASKS: Task[] = [
   { title: "Solicitações internas de baixo impacto", quadrant: "q3", ei_quadrant: "ei3" },
   { title: "Ajustes estéticos", quadrant: "q4", ei_quadrant: "ei4", due_date: todayPlus(-2) },
   { title: "Checar encaminhamentos do Suporte BR", source: "slack", slack_user_name: "Renan Palmieri", suggested_quadrant: "q1", suggested_ei_quadrant: "ei1" },
+  { title: "Revisar briefing da campanha", quadrant: "q1", ei_quadrant: "ei1", done: true, done_at: new Date(Date.now() - 86_400_000).toISOString() },
+  { title: "Responder dúvidas do time de vendas", quadrant: "q3", ei_quadrant: "ei3", done: true, reviewed: true, done_at: new Date(Date.now() - 86_400_000).toISOString() },
   { title: "Trocar link do grupo de alunos nos e-mails", source: "slack", slack_user_name: "Heitor Catunda", due_date: todayPlus(2), suggested_quadrant: "q2", suggested_ei_quadrant: "ei1" },
 ].map((t, i) => mkDemo(t as Partial<Task>, i));
 
@@ -1176,6 +1225,9 @@ const DEMO_TASKS: Task[] = [
 // ======================================================================
 function todayYmd() {
   return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+function localYmd(iso: string) {
+  return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
 }
 function todayPlus(n: number) {
   const d = new Date(todayYmd() + "T12:00:00");
