@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+supabase/.temp/
+supabase/.branches/
+
+# prints e imagens de referência (contêm mensagens do Slack)
+/*.png
+/*.jpg
+*.tsbuildinfo

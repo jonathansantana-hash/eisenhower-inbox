@@ -1,0 +1,21 @@
+# Cole em https://api.slack.com/apps → Create New App → From a manifest
+# (os eventos são adicionados depois do deploy da função — veja o README, passo 4)
+display_information:
+  name: Eisenhower Inbox
+  description: Transforma pedidos que chegam para você no Slack em tarefas na sua matriz de Eisenhower.
+  background_color: "#3b5bdb"
+oauth_config:
+  redirect_urls:
+    - https://lmygkzlokhajzckyqhfc.supabase.co/functions/v1/slack-events/oauth
+  scopes:
+    user:
+      - im:history        # DMs que você recebe
+      - mpim:history      # DMs em grupo
+      - channels:history  # canais públicos (menções e canais monitorados)
+      - groups:history    # canais privados
+      - reactions:read    # gatilho por emoji 📌
+      - users:read        # nome de quem pediu
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

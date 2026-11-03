@@ -1,0 +1,3 @@
+[functions.slack-events]
+# O Slack não envia JWT do Supabase; a autenticação é feita pela assinatura do Slack.
+verify_jwt = false
