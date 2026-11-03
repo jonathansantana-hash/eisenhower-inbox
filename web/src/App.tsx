@@ -12,7 +12,14 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { supabase, type Task } from "./supabase";
+import {
+  supabase,
+  FUNCTIONS_URL,
+  DEFAULT_SETTINGS,
+  type SlackConnection,
+  type Task,
+  type UserSettings,
+} from "./supabase";
 import { MATRICES, QUADRANT_LABEL, type MatrixDef, type MatrixId, type QuadrantDef, type QuadrantId } from "./matrices";
 import { Icon } from "./Icons";
 
@@ -42,17 +49,35 @@ export default function App() {
   return session ? <Board email={session.user.email ?? ""} /> : <Login />;
 }
 
+const siteUrl = () => window.location.origin + window.location.pathname;
+
+// Erros que o Supabase devolve na URL depois do login (ex.: domínio bloqueado)
+function authErrorFromUrl(): string {
+  const params = new URLSearchParams(window.location.hash.slice(1) || window.location.search);
+  const desc = params.get("error_description");
+  if (!desc) return "";
+  if (/database error|acesso restrito/i.test(desc)) return "Acesso restrito a contas @hashtagtreinamentos.com.";
+  return desc.replace(/\+/g, " ");
+}
+
 function Login() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState("");
+  const [showEmail, setShowEmail] = useState(false);
+  const [error, setError] = useState(authErrorFromUrl);
 
-  async function submit(e: React.FormEvent) {
+  async function slackLogin() {
+    setError("");
+    const { error } = await supabase.auth.signInWithOAuth({ provider: "slack_oidc", options: { redirectTo: siteUrl() } });
+    if (error) setError(error.message);
+  }
+
+  async function emailLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.href.split("#")[0], shouldCreateUser: false },
+      options: { emailRedirectTo: siteUrl(), shouldCreateUser: false },
     });
     if (error) setError(error.message);
     else setSent(true);
@@ -61,14 +86,23 @@ function Login() {
   return (
     <main className="login">
       <h1>Prioridades</h1>
-      <p className="muted">Matriz de Eisenhower e Esforço x Impacto</p>
-      {sent ? (
+      <p className="muted">Transforme pedidos do Slack em tarefas priorizadas.</p>
+
+      <button className="btn slack-btn" onClick={slackLogin}>
+        <Icon name="slack" size={18} /> Entrar com Slack
+      </button>
+      <p className="login-note">Use sua conta da Hashtag Treinamentos.</p>
+
+      {error && <p className="error">{error}</p>}
+
+      {!showEmail ? (
+        <button className="link login-alt" onClick={() => setShowEmail(true)}>Entrar com e-mail</button>
+      ) : sent ? (
         <p>Enviamos um link de acesso para <b>{email}</b>.</p>
       ) : (
-        <form onSubmit={submit}>
-          <input type="email" required placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <button type="submit" className="btn primary">Entrar com link mágico</button>
-          {error && <p className="error">{error}</p>}
+        <form onSubmit={emailLogin}>
+          <input type="email" required placeholder="seu@hashtagtreinamentos.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <button type="submit" className="btn">Enviar link de acesso</button>
         </form>
       )}
     </main>
@@ -79,7 +113,15 @@ function Login() {
 // Board
 // ======================================================================
 type NewTaskDraft = { quadrant?: QuadrantId | null };
-type Toast = { id: number; text: string; undo?: () => void };
+type Toast = { id: number; text: string; undo?: () => void; error?: boolean };
+
+const SLACK_RESULT: Record<string, { text: string; error?: boolean }> = {
+  ok: { text: "Slack conectado! Novos pedidos vão aparecer em Novas." },
+  cancelado: { text: "Conexão com o Slack cancelada.", error: true },
+  expirado: { text: "O link expirou. Tente conectar de novo.", error: true },
+  "em-uso": { text: "Esse usuário do Slack já está ligado a outra conta.", error: true },
+  erro: { text: "Não foi possível conectar o Slack. Tente de novo.", error: true },
+};
 type QuickInput = { title: string; summary: string; due_date: string };
 const TOAST_MS = 10_000;
 
@@ -100,6 +142,69 @@ function Board({ email, demo }: { email: string; demo?: Task[] }) {
   const [creating, setCreating] = useState<NewTaskDraft | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [error, setError] = useState("");
+  const [slackConn, setSlackConn] = useState<SlackConnection | null | undefined>(demo ? null : undefined);
+  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+
+  // Conexão com o Slack + preferências
+  useEffect(() => {
+    if (demo) return;
+    supabase.rpc("my_slack_connection").then(({ data }) => setSlackConn((data as SlackConnection[] | null)?.[0] ?? null));
+    supabase
+      .from("user_settings")
+      .select("watch_dms, watch_mentions, watch_channel_ids, vip_user_ids, important_keywords")
+      .maybeSingle()
+      .then(({ data }) => data && setSettings(data as UserSettings));
+
+    // Volta do Slack: ?slack=ok|erro|…
+    const params = new URLSearchParams(location.search);
+    const r = params.get("slack");
+    if (r) {
+      const msg = SLACK_RESULT[r] ?? SLACK_RESULT.erro;
+      pushToast(msg);
+      params.delete("slack");
+      const qs = params.toString();
+      history.replaceState(null, "", location.pathname + (qs ? `?${qs}` : ""));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo]);
+
+  async function connectSlack() {
+    setConnecting(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const res = await fetch(`${FUNCTIONS_URL}/connect`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}` },
+      });
+      const body = await res.json();
+      if (!res.ok || !body.url) throw new Error(body.error || "Falha ao iniciar a conexão");
+      window.location.href = body.url;
+    } catch (e) {
+      setConnecting(false);
+      pushToast({ text: (e as Error).message, error: true });
+    }
+  }
+
+  async function disconnectSlack() {
+    if (!confirm("Desconectar o Slack? Novas mensagens deixarão de virar tarefas.")) return;
+    const { error } = await supabase.rpc("disconnect_slack");
+    if (error) return setError(error.message);
+    setSlackConn(null);
+  }
+
+  async function saveSettings(s: UserSettings) {
+    setSettings(s);
+    if (demo) return true;
+    const { error } = await supabase.from("user_settings").upsert({ ...s, updated_at: new Date().toISOString() });
+    if (error) {
+      setError(error.message);
+      return false;
+    }
+    pushToast({ text: "Configurações salvas" });
+    return true;
+  }
 
   const matrix = MATRICES[matrixId];
 
@@ -261,6 +366,9 @@ function Board({ email, demo }: { email: string; demo?: Task[] }) {
           <button className="btn primary" onClick={() => setCreating({})}>
             <Icon name="plus" size={16} /> Nova tarefa
           </button>
+          <button className="icon-btn" title="Configurações" aria-label="Configurações" onClick={() => setSettingsOpen(true)}>
+            <Icon name="gear" size={16} />
+          </button>
           <button className="icon-btn" title={`Sair (${email})`} aria-label="Sair" onClick={() => supabase.auth.signOut()}>
             <Icon name="logout" size={16} />
           </button>
@@ -303,6 +411,18 @@ function Board({ email, demo }: { email: string; demo?: Task[] }) {
           </div>
 
           <aside className="side">
+            {slackConn === null && !demo && (
+              <section className="connect-card">
+                <Icon name="slack" size={20} />
+                <div>
+                  <b>Conecte seu Slack</b>
+                  <p>Pedidos que chegarem por DM ou menção viram tarefas aqui automaticamente.</p>
+                  <button className="btn primary sm" onClick={connectSlack} disabled={connecting}>
+                    {connecting ? "Abrindo o Slack…" : "Conectar Slack"}
+                  </button>
+                </div>
+              </section>
+            )}
             <Inbox
               tasks={inbox}
               matrix={matrix}
@@ -367,10 +487,25 @@ function Board({ email, demo }: { email: string; demo?: Task[] }) {
         />
       )}
 
+      {settingsOpen && (
+        <SettingsModal
+          email={email}
+          settings={settings}
+          slackConn={slackConn}
+          connecting={connecting}
+          onConnect={connectSlack}
+          onDisconnect={disconnectSlack}
+          onSave={async (s) => {
+            if (await saveSettings(s)) setSettingsOpen(false);
+          }}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
       <div className="toasts" role="status" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className="toast" style={{ "--ms": `${TOAST_MS}ms` } as React.CSSProperties}>
-            <Icon name="check" size={14} className="toast-icon" />
+          <div key={t.id} className={`toast ${t.error ? "err" : ""}`} style={{ "--ms": `${TOAST_MS}ms` } as React.CSSProperties}>
+            <Icon name={t.error ? "x" : "check"} size={14} className="toast-icon" />
             <span>{t.text}</span>
             {t.undo && (
               <button
@@ -896,6 +1031,114 @@ function TaskModal({
             </button>
             <button type="button" className="link danger" onClick={onRemove}>Descartar</button>
           </div>
+          <button type="submit" className="btn primary">Salvar</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ======================================================================
+// Configurações
+// ======================================================================
+const toList = (s: string) => s.split(/[,\n]/).map((x) => x.trim()).filter(Boolean);
+
+function SettingsModal({
+  email,
+  settings,
+  slackConn,
+  connecting,
+  onConnect,
+  onDisconnect,
+  onSave,
+  onClose,
+}: {
+  email: string;
+  settings: UserSettings;
+  slackConn: SlackConnection | null | undefined;
+  connecting: boolean;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onSave: (s: UserSettings) => void;
+  onClose: () => void;
+}) {
+  const [dms, setDms] = useState(settings.watch_dms);
+  const [mentions, setMentions] = useState(settings.watch_mentions);
+  const [vips, setVips] = useState(settings.vip_user_ids.join(", "));
+  const [keywords, setKeywords] = useState(settings.important_keywords.join(", "));
+  const [channels, setChannels] = useState(settings.watch_channel_ids.join(", "));
+
+  return (
+    <Modal title="Configurações" onClose={onClose}>
+      <form
+        className="form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave({
+            watch_dms: dms,
+            watch_mentions: mentions,
+            vip_user_ids: toList(vips),
+            important_keywords: toList(keywords),
+            watch_channel_ids: toList(channels),
+          });
+        }}
+      >
+        <div className="settings-block">
+          <div className="settings-row">
+            <div>
+              <b>Slack</b>
+              <small>
+                {slackConn === undefined
+                  ? "Verificando…"
+                  : slackConn
+                    ? `Conectado como ${slackConn.slack_user_id}`
+                    : "Não conectado"}
+              </small>
+            </div>
+            {slackConn ? (
+              <div className="settings-actions">
+                <button type="button" className="link" onClick={onConnect} disabled={connecting}>Reconectar</button>
+                <button type="button" className="link danger" onClick={onDisconnect}>Desconectar</button>
+              </div>
+            ) : (
+              <button type="button" className="btn primary sm" onClick={onConnect} disabled={connecting || slackConn === undefined}>
+                {connecting ? "Abrindo…" : "Conectar Slack"}
+              </button>
+            )}
+          </div>
+          <small className="hint">Logado como {email}</small>
+        </div>
+
+        <fieldset className="settings-block">
+          <legend>O que vira tarefa</legend>
+          <label className="check-label">
+            <input type="checkbox" checked={dms} onChange={(e) => setDms(e.target.checked)} />
+            Mensagens diretas (DMs) que eu receber
+          </label>
+          <label className="check-label">
+            <input type="checkbox" checked={mentions} onChange={(e) => setMentions(e.target.checked)} />
+            Mensagens em canais que me mencionarem
+          </label>
+          <p className="hint">Reagir com 📌 a qualquer mensagem sempre cria uma tarefa.</p>
+        </fieldset>
+
+        <label>
+          Pessoas-chave <span className="opt">IDs do Slack, separados por vírgula</span>
+          <input value={vips} onChange={(e) => setVips(e.target.value)} placeholder="U012ABC, U034DEF" />
+          <small className="hint">Pedidos delas sempre contam como importantes. Para pegar o ID: perfil da pessoa → ⋮ → Copiar ID do membro.</small>
+        </label>
+        <label>
+          Palavras importantes <span className="opt">separadas por vírgula</span>
+          <input value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="lançamento, black friday, pós" />
+        </label>
+        <label>
+          Canais monitorados <span className="opt">opcional · IDs de canal</span>
+          <input value={channels} onChange={(e) => setChannels(e.target.value)} placeholder="C012ABC" />
+          <small className="hint">Toda mensagem nesses canais passa pela triagem, mesmo sem menção a você.</small>
+        </label>
+
+        <div className="form-actions">
+          <button type="button" className="btn" onClick={onClose}>Cancelar</button>
           <button type="submit" className="btn primary">Salvar</button>
         </div>
       </form>

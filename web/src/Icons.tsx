@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export type IconName =
   | "users" | "bolt" | "trash" | "calendar" | "trophy" | "chart" | "doc" | "ban"
-  | "target" | "list" | "search" | "plus" | "x" | "slack" | "check" | "inbox" | "logout";
+  | "target" | "list" | "search" | "plus" | "x" | "slack" | "check" | "inbox" | "logout" | "gear";
 
 const PATHS: Record<IconName, ReactNode> = {
   users: (
@@ -46,6 +46,9 @@ const PATHS: Record<IconName, ReactNode> = {
   inbox: <path d="M4 4h16l2 9v7H2v-7zm1.6 2-1.5 7H8l1.5 2.5h5L16 13h3.9l-1.5-7z" />,
   slack: (
     <path d="M9 3a2 2 0 0 0 0 4h2V5a2 2 0 0 0-2-2zm0 5.5H4a2 2 0 0 0 0 4h5a2 2 0 0 0 0-4zM21 10.5a2 2 0 0 0-4 0v2h2a2 2 0 0 0 2-2zm-5.5 0V5a2 2 0 0 0-4 0v5.5a2 2 0 0 0 4 0zM15 21a2 2 0 0 0 0-4h-2v2a2 2 0 0 0 2 2zm0-5.5h5a2 2 0 0 0 0-4h-5a2 2 0 0 0 0 4zM3 13.5a2 2 0 0 0 4 0v-2H5a2 2 0 0 0-2 2zm5.5 0V19a2 2 0 0 0 4 0v-5.5a2 2 0 0 0-4 0z" />
+  ),
+  gear: (
+    <path d="M10.3 2h3.4l.5 2.6c.6.2 1.2.5 1.7.9l2.5-.9 1.7 2.9-2 1.8a7 7 0 0 1 0 2l2 1.8-1.7 2.9-2.5-.9c-.5.4-1.1.7-1.7.9l-.5 2.6h-3.4l-.5-2.6c-.6-.2-1.2-.5-1.7-.9l-2.5.9-1.7-2.9 2-1.8a7 7 0 0 1 0-2l-2-1.8 1.7-2.9 2.5.9c.5-.4 1.1-.7 1.7-.9zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
   ),
   logout: <path d="M4 3h9v2H6v14h7v2H4zm12.6 4.4L21.2 12l-4.6 4.6-1.4-1.4 2.2-2.2H9v-2h8.4l-2.2-2.2z" />,
 };

@@ -6,9 +6,13 @@ display_information:
   background_color: "#3b5bdb"
 oauth_config:
   redirect_urls:
-    - https://lmygkzlokhajzckyqhfc.supabase.co/functions/v1/slack-events/oauth
+    - https://lmygkzlokhajzckyqhfc.supabase.co/functions/v1/slack-events/oauth   # "Conectar Slack"
+    - https://lmygkzlokhajzckyqhfc.supabase.co/auth/v1/callback                  # "Entrar com Slack"
   scopes:
     user:
+      - openid            # Entrar com Slack
+      - email
+      - profile
       - im:history        # DMs que você recebe
       - mpim:history      # DMs em grupo
       - channels:history  # canais públicos (menções e canais monitorados)

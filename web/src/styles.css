@@ -59,6 +59,35 @@ input, textarea, select { font: inherit; color: inherit; }
 .login input { height: 42px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 9px; background: #fff; }
 .login .btn { justify-content: center; height: 42px; }
 
+.slack-btn {
+  width: 100%; justify-content: center; height: 44px; margin-top: 28px; font-size: 15px; font-weight: 600;
+  background: #4a154b; border-color: #4a154b; color: #fff;
+}
+.slack-btn:hover { background: #3c0f3d; border-color: #3c0f3d; }
+.login-note { margin: 8px 0 18px; color: var(--faint); font-size: 12.5px; }
+.login-alt { color: var(--muted); }
+.login form { margin-top: 14px; }
+
+/* Conectar Slack */
+.connect-card {
+  display: flex; gap: 12px; padding: 14px; border-radius: var(--radius);
+  background: #faf5fb; border: 1px solid #ecd9ee; color: #4a154b;
+}
+.connect-card svg { flex: none; margin-top: 2px; }
+.connect-card b { display: block; font-size: 14px; color: var(--ink); }
+.connect-card p { margin: 4px 0 10px; font-size: 12.5px; color: var(--ink-2); line-height: 1.4; }
+
+/* Configurações */
+.settings-block { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.settings-block legend { padding: 0 4px; font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
+.settings-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.settings-row b { display: block; font-size: 14px; }
+.settings-row small { color: var(--muted); font-size: 12.5px; }
+.settings-actions { display: flex; gap: 14px; }
+.form .check-label { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; font-weight: 400; color: var(--ink); }
+.form .check-label input { min-height: 0; width: 16px; height: 16px; }
+.toast.err .toast-icon { color: #c0392b; }
+
 /* ---------- Página ---------- */
 .page { max-width: 1440px; margin: 0 auto; padding: 28px 32px 40px; }
 .error { background: #fdecea; color: #a12a1e; padding: 10px 14px; border-radius: 9px; cursor: pointer; }
