@@ -15,7 +15,7 @@ const SLACK_CLIENT_ID = env("SLACK_CLIENT_ID");
 const SLACK_CLIENT_SECRET = env("SLACK_CLIENT_SECRET");
 const SITE_URL = env("SITE_URL", "https://jonathansantana-hash.github.io/eisenhower-inbox/");
 const ALLOWED_DOMAIN = env("ALLOWED_EMAIL_DOMAIN", "hashtagtreinamentos.com");
-const USER_SCOPES = "channels:history,groups:history,im:history,mpim:history,reactions:read,users:read";
+const USER_SCOPES = "channels:history,groups:history,im:history,mpim:history,im:read,mpim:read,reactions:read,users:read";
 const TRIGGER_EMOJIS = env("TRIGGER_EMOJI", "pushpin,round_pushpin").split(",").map((s) => s.trim()).filter(Boolean);
 
 const ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY"); // vazio = classificação por regras
@@ -217,6 +217,9 @@ async function handleEvent(payload: any) {
 
   // 2) DM / DM em grupo: destinatários = membros da conversa, menos quem enviou
   if (ev.channel_type === "im" || ev.channel_type === "mpim") {
+    // Quem recebeu o evento (authorizations) participa da conversa: se não foi quem enviou, é destinatário.
+    // Não depende de conversations.members, que exige im:read/mpim:read.
+    if (via && via.slackUserId !== sender && via.settings.watch_dms) recipients.set(via.userId, via);
     const tokenForLookup = via?.token ?? [...map.values()][0]?.token;
     const members = tokenForLookup ? await channelMembers(tokenForLookup, ev.channel) : [];
     for (const m of members) {
