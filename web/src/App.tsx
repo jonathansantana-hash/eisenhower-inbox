@@ -231,27 +231,70 @@ function Board({ email, demo }: { email: string; demo?: Task[] }) {
   // Carrega + realtime
   useEffect(() => {
     if (demo) return;
-    supabase
-      .from("tasks")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(1000)
-      .then(({ data, error }) => {
-        if (error) setError(error.message);
-        else setTasks(data as Task[]);
-      });
+    let disposed = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let retry: ReturnType<typeof setTimeout> | undefined;
 
-    const channel = supabase
-      .channel("tasks-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, (p) => {
-        setTasks((prev) => {
-          if (p.eventType === "DELETE") return prev.filter((t) => t.id !== (p.old as Task).id);
-          return upsert(prev, p.new as Task);
+    const load = () =>
+      supabase
+        .from("tasks")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(1000)
+        .then(({ data, error }) => {
+          if (disposed) return;
+          if (error) setError(error.message);
+          else setTasks(data as Task[]);
         });
-      })
-      .subscribe();
+
+    // O Realtime cai quando o computador dorme ou a aba fica muito tempo parada.
+    // Ao cair, reconecta; ao (re)conectar, recarrega para pegar o que chegou nesse meio-tempo.
+    const subscribe = () => {
+      if (disposed) return;
+      const old = channel;
+      channel = null;
+      if (old) supabase.removeChannel(old);
+      const ch = supabase
+        .channel("tasks-realtime")
+        .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, (p) => {
+          setTasks((prev) => {
+            if (p.eventType === "DELETE") return prev.filter((t) => t.id !== (p.old as Task).id);
+            return upsert(prev, p.new as Task);
+          });
+        })
+        .subscribe((status) => {
+          if (disposed || ch !== channel) return; // canal antigo, já substituído
+          if (status === "SUBSCRIBED") load();
+          else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            clearTimeout(retry);
+            retry = setTimeout(subscribe, 5000);
+          }
+        });
+      channel = ch;
+    };
+
+    const refresh = async () => {
+      if (document.visibilityState !== "visible") return;
+      await supabase.auth.getSession(); // renova o token se expirou enquanto a aba dormia
+      load();
+      if (channel?.state !== "joined") subscribe();
+    };
+
+    subscribe();
+    const interval = setInterval(refresh, 5 * 60_000); // rede de segurança
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("online", refresh);
     return () => {
-      supabase.removeChannel(channel);
+      disposed = true;
+      clearTimeout(retry);
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("online", refresh);
+      const ch = channel;
+      channel = null;
+      if (ch) supabase.removeChannel(ch);
     };
   }, [demo]);
 
